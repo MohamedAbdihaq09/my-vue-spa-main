@@ -136,6 +136,8 @@
       </div>
     </section>
 
+    <GettingHereMap />
+
     <aside class="notice" :aria-label="t('map.noticeLabel')">
       <span aria-hidden="true">i</span>
       <span>
@@ -148,9 +150,11 @@
 
 <script>
 import { t } from '../i18n.js'
+import GettingHereMap from '../components/GettingHereMap.vue'
 
 export default {
   name: 'MuseumMapView',
+  components: { GettingHereMap },
   data() {
     return {
       selectedPlaceId: 'european-art',
