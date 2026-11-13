@@ -3,7 +3,7 @@
 // Bygger på undervisningens Overpass-eksempel, tilpasset til SMK.
 // Henter steder omkring museet fra OpenStreetMap via Overpass API.
 // ─────────────────────────────────────────────────────────────
-
+//hej med dig//
 // Flere Overpass-servere med de samme data.
 // Svarer den første ikke, prøves den næste.
 const OVERPASS_URLS = [
