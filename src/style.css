@@ -771,6 +771,151 @@ input:focus-visible {
   background: #955a2c;
 }
 
+
+
+/* MAP */
+
+/* Additions for the data-driven SMK map. Existing classes (.floor-outline,
+   .floor-room, .room-shape, .room-map-label, .is-selected ...) keep their
+   current styles; these rules only cover the new elements. Colour tokens fall
+   back to values that match the dark plans. Swap in your design tokens. */
+
+.map-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.zoom-controls {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.zoom-button {
+  min-width: 44px;
+  min-height: 44px; /* WCAG 2.2 target size */
+  border: 1px solid var(--map-stroke, #f1ece3);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.zoom-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.zoom-button:focus-visible {
+  outline: 3px solid var(--map-focus, #ffbf47);
+  outline-offset: 2px;
+}
+
+.floor-map-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.floor-plan {
+  display: block;
+  height: auto;
+}
+
+/* Keep line weight constant at every zoom level and level transform. */
+.floor-plan path,
+.floor-plan rect,
+.floor-plan circle,
+.floor-plan line {
+  vector-effect: non-scaling-stroke;
+}
+
+.floor-space {
+  fill: url(#floor-hatch);
+  stroke: var(--map-stroke, #f1ece3);
+  stroke-width: 1.5;
+}
+
+.floor-bridge {
+  fill: var(--map-fill, #1f2023);
+}
+
+.floor-void {
+  fill: var(--map-bg, #0b0b0c);
+  stroke: var(--map-stroke, #f1ece3);
+  stroke-width: 2;
+}
+
+.floor-fixture {
+  fill: none;
+  stroke: var(--map-stroke, #f1ece3);
+  stroke-width: 2;
+}
+
+.hatch-line {
+  stroke: var(--map-stroke, #f1ece3);
+  stroke-width: 1;
+  opacity: 0.35;
+}
+
+.floor-room {
+  cursor: pointer;
+}
+
+/* Visible keyboard focus, not colour-only (3:1+ against the dark plan). */
+.floor-room:focus {
+  outline: none;
+}
+
+.floor-room:focus-visible .room-shape {
+  stroke: var(--map-focus, #ffbf47);
+  stroke-width: 4;
+  stroke-dasharray: 10 5;
+}
+
+/* Selected state uses weight + dash pattern as well as colour. */
+.floor-room.is-selected .room-shape {
+  stroke-width: 5;
+}
+
+.floor-room:hover .room-shape {
+  stroke-width: 3.5;
+}
+
+.map-icon circle {
+  fill: var(--map-icon-bg, #8a8c90);
+}
+
+.map-icon-glyph {
+  fill: #fff;
+}
+
+.map-icon-glyph.glyph-stroke,
+.map-icon-glyph .glyph-stroke {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.plan-pending {
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  padding: 24px;
+  border: 1px dashed var(--map-stroke, #f1ece3);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .floor-room .room-shape {
+    transition: stroke-width 0.15s ease;
+  }
+}
+
+
 @media (max-width: 760px) {
   .site-header {
     padding-top: 19px;

@@ -30,15 +30,23 @@
           </button>
         </div>
 
-        <p class="map-label">
-          {{ t(`map.levels.${currentLevel.id}`) }} · {{ t('map.schematicPlan') }}
-        </p>
+        <div class="map-toolbar">
+          <p class="map-label">
+            {{ t(`map.levels.${currentLevel.id}`) }} · {{ t('map.schematicPlan') }}
+          </p>
+          <div v-if="currentLevel.planAvailable" class="zoom-controls" role="group" :aria-label="t('map.zoomLabel')">
+            <button class="zoom-button" type="button" :disabled="zoom <= minZoom" :aria-label="t('map.zoomOut')" @click="zoomOut">−</button>
+            <button class="zoom-button" type="button" :disabled="zoom === 1" :aria-label="t('map.zoomReset')" @click="zoomReset">100%</button>
+            <button class="zoom-button" type="button" :disabled="zoom >= maxZoom" :aria-label="t('map.zoomIn')" @click="zoomIn">+</button>
+          </div>
+        </div>
 
-        <div class="floor-map-scroll">
+        <div v-if="currentLevel.planAvailable" class="floor-map-scroll">
           <svg
             id="floor-plan-panel"
             class="floor-plan"
-            viewBox="0 0 640 370"
+            :viewBox="viewBox"
+            :style="svgStyle"
             role="tabpanel"
             :aria-labelledby="`floor-tab-${currentLevel.id} floor-plan-title`"
             aria-describedby="floor-plan-description"
@@ -47,43 +55,80 @@
               {{ t(`map.levels.${currentLevel.id}`) }} {{ t('map.floorPlanSuffix') }}
             </title>
             <desc id="floor-plan-description">{{ t('map.floorPlanDescription') }}</desc>
-            <path class="floor-outline" d="M22 24H618V330H355V352H285V330H22Z" />
-            <path class="floor-corridor" d="M43 163H597M320 163V315" />
-            <path
-              v-for="room in currentLevelRooms"
-              :key="`${room.place.id}-connector`"
-              class="room-connector"
-              :d="room.connector"
-            />
-            <g
-              v-for="room in currentLevelRooms"
-              :key="room.place.id"
-              class="floor-room"
-              :class="{ 'is-selected': selectedPlaceId === room.place.id }"
-              role="button"
-              tabindex="0"
-              :aria-label="t('map.roomSelectLabel', { name: t(`places.${room.place.id}.name`), location: t(`places.${room.place.id}.location`) })"
-              :aria-pressed="selectedPlaceId === room.place.id"
-              @click="selectPlace(room.place)"
-              @keydown="activateRoom($event, room.place)"
-            >
-              <rect
-                class="room-shape"
-                :x="room.x"
-                :y="room.y"
-                :width="room.width"
-                :height="room.height"
-                rx="2"
-              />
-              <text class="room-map-label" :x="room.x + room.width / 2" :y="room.y + 42">
-                {{ t(`places.${room.place.id}.mapLabel`) }}
-              </text>
-              <text class="room-map-caption" :x="room.x + room.width / 2" :y="room.y + 66">
-                {{ t(`places.${room.place.id}.location`).split(' · ')[0] }}
-              </text>
+
+            <defs>
+              <pattern id="floor-hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="8" class="hatch-line" />
+              </pattern>
+            </defs>
+
+            <g :transform="currentLevel.transform || null">
+              <path v-for="(d, i) in currentLevel.shell" :key="`shell-${i}`" class="floor-outline" :d="d" />
+              <path v-for="(d, i) in currentLevel.spaces" :key="`space-${i}`" class="floor-space" :d="d" />
+              <path v-for="(d, i) in currentLevel.bridges" :key="`bridge-${i}`" class="floor-space floor-bridge" :d="d" />
+              <path v-for="(d, i) in currentLevel.voids" :key="`void-${i}`" class="floor-void" :d="d" />
+              <path v-for="(d, i) in currentLevel.fixtures" :key="`fixture-${i}`" class="floor-fixture" :d="d" />
+
+              <g
+                v-for="room in orderedRooms"
+                :key="room.placeId"
+                class="floor-room"
+                :class="{ 'is-selected': selectedPlaceId === room.placeId }"
+                role="button"
+                tabindex="0"
+                :aria-label="t('map.roomSelectLabel', { name: placeName(room.placeId), location: placeLocation(room.placeId) })"
+                :aria-pressed="selectedPlaceId === room.placeId"
+                @click="selectPlaceById(room.placeId)"
+                @keydown="activateRoom($event, room.placeId)"
+              >
+                <path class="room-shape" :d="room.d" />
+                <text
+                  v-if="roomLabel(room)"
+                  class="room-map-label"
+                  text-anchor="middle"
+                  dominant-baseline="middle"
+                  :x="room.x"
+                  :y="room.y"
+                  :font-size="room.labelSize || currentLevel.labelSize"
+                >
+                  {{ roomLabel(room) }}
+                </text>
+                <g v-if="room.icon" class="map-icon" :transform="`translate(${room.icon.x} ${room.icon.y})`" aria-hidden="true">
+                  <circle :r="room.icon.r" />
+                  <g class="map-icon-glyph" :transform="`scale(${room.icon.r / 22})`">
+                    <template v-if="room.icon.type === 'wc'">
+                      <circle cx="-8" cy="-11" r="3.5" />
+                      <path d="M-12 -5H-4V6H-6V13H-10V6H-12Z" />
+                      <circle cx="8" cy="-11" r="3.5" />
+                      <path d="M8 -5L13 6H3Z M6 6H10V13H6Z" />
+                      <path d="M0 -14V14" class="glyph-stroke" />
+                    </template>
+                  </g>
+                </g>
+              </g>
+
+              <g
+                v-for="(icon, i) in currentLevel.icons"
+                :key="`icon-${i}`"
+                class="map-icon"
+                :transform="`translate(${icon.x} ${icon.y})`"
+                aria-hidden="true"
+              >
+                <circle :r="icon.r" />
+                <g class="map-icon-glyph glyph-stroke" :transform="`scale(${icon.r / 22})`">
+                  <path v-if="icon.type === 'stairs'" d="M-10 10H-4V4H2V-2H8V-8H12" />
+                  <template v-else-if="icon.type === 'lift'">
+                    <rect x="-11" y="-11" width="22" height="22" rx="2" />
+                    <path d="M-5 -1L0 -7L5 -1M-5 2L0 8L5 2" />
+                  </template>
+                </g>
+              </g>
             </g>
-            <text class="entrance-label" x="320" y="348">{{ t('map.mainEntrance') }}</text>
           </svg>
+        </div>
+
+        <div v-else id="floor-plan-panel" class="plan-pending" role="tabpanel" :aria-labelledby="`floor-tab-${currentLevel.id}`">
+          <p>{{ t('map.planUnavailable') }}</p>
         </div>
 
         <div class="map-legend">
@@ -96,23 +141,42 @@
 
       <article v-if="selectedPlace" class="detail-card" aria-live="polite">
         <div>
-          <p class="eyebrow">{{ t(`places.${selectedPlace.id}.category`) }}</p>
-          <h2>{{ t(`places.${selectedPlace.id}.name`) }}</h2>
-          <p class="muted-copy">{{ t(`places.${selectedPlace.id}.description`) }}</p>
+          <p class="eyebrow">{{ placeCategory(selectedPlace) }}</p>
+          <h2>{{ placeName(selectedPlace.id) }}</h2>
+          <p class="muted-copy">{{ placeDescription(selectedPlace) }}</p>
         </div>
-        <p class="detail-meta">{{ t(`places.${selectedPlace.id}.location`) }}</p>
+        <p class="detail-meta">{{ placeLocation(selectedPlace.id) }}</p>
+        <p v-if="!selectedRoomOnMap" class="detail-meta">{{ t('map.notOnPlan') }}</p>
         <div class="room-directions">
           <h3>{{ t('map.directionsTitle') }}</h3>
           <ol class="direction-list">
-            <li
-              v-for="(step, index) in t(`places.${selectedPlace.id}.directions`)"
-              :key="index"
-            >
+            <li v-for="(step, index) in placeDirections(selectedPlace)" :key="index">
               {{ step }}
             </li>
           </ol>
         </div>
       </article>
+    </section>
+
+    <section aria-labelledby="zones-title">
+      <div class="section-heading">
+        <h2 id="zones-title">{{ t('map.zonesTitle') }}</h2>
+        <span class="section-kicker">{{ t('map.zonesKicker') }}</span>
+      </div>
+      <div class="facility-grid">
+        <button
+          v-for="(zone, index) in zones"
+          :key="zone.id"
+          class="facility-link"
+          :class="{ 'is-selected': selectedPlaceId === zone.id }"
+          type="button"
+          :aria-pressed="selectedPlaceId === zone.id"
+          @click="selectPlace(zone)"
+        >
+          <span class="facility-icon" aria-hidden="true">{{ index + 1 }}</span>
+          <span class="facility-name">{{ placeName(zone.id) }}</span>
+        </button>
+      </div>
     </section>
 
     <section aria-labelledby="facilities-title">
@@ -131,7 +195,7 @@
           @click="selectPlace(facility)"
         >
           <span class="facility-icon" aria-hidden="true">{{ index + 1 }}</span>
-          <span class="facility-name">{{ t(`places.${facility.id}.name`) }}</span>
+          <span class="facility-name">{{ placeName(facility.id) }}</span>
         </button>
       </div>
     </section>
@@ -151,200 +215,55 @@
 <script>
 import { t } from '../i18n.js'
 import GettingHereMap from '../components/GettingHereMap.vue'
+import { VIEWBOX, levels, zones, facilities, places } from '../data/smkFloorPlans.js'
 
 export default {
   name: 'MuseumMapView',
   components: { GettingHereMap },
   data() {
     return {
+      levels,
+      zones,
+      facilities,
+      viewBox: VIEWBOX,
       selectedPlaceId: 'european-art',
-      zones: [
-        {
-          id: 'european-art',
-          category: 'Collection zone',
-          name: 'European Art 1300–1800',
-          location: 'Ground level · prototype room',
-          directions: [
-            'From the main entrance, continue into the ground-level gallery corridor.',
-            'Turn toward the European Art gallery on your left.',
-            'Enter the European Art 1300–1800 room.',
-          ],
-          description:
-            'Explore European paintings and sculpture from the late medieval period through the eighteenth century.',
-        },
-        {
-          id: 'danish-golden-age',
-          category: 'Collection zone',
-          name: 'Danish Golden Age',
-          location: 'First level · prototype room',
-          directions: [
-            'From the main entrance, follow the stairs to the first level.',
-            'Turn into the gallery corridor and continue toward Danish collections.',
-            'Enter the Danish Golden Age room.',
-          ],
-          description:
-            'Discover the artists and changing cultural life of Denmark in the early nineteenth century.',
-        },
-        {
-          id: 'modern-art',
-          category: 'Collection zone',
-          name: 'Modern Art',
-          location: 'Second level · prototype room',
-          directions: [
-            'From the main entrance, follow the stairs to the second level.',
-            'Turn into the gallery corridor toward the modern collections.',
-            'Enter the Modern Art room.',
-          ],
-          description:
-            'Move through modern and contemporary works from Denmark and around the world.',
-        },
-      ],
-      facilities: [
-        {
-          id: 'lockers',
-          category: 'Visitor facility',
-          name: 'Lockers',
-          location: 'Ground level · prototype room',
-          directions: [
-            'From the main entrance, continue into the ground-level corridor.',
-            'Turn toward visitor services on your right.',
-            'The locker area is in the visitor-services room.',
-          ],
-          description: 'Find the visitor-services area and check with staff for current locker access.',
-        },
-        {
-          id: 'cafe',
-          category: 'Visitor facility',
-          name: 'Café',
-          location: 'First level · prototype room',
-          directions: [
-            'From the main entrance, follow the stairs to the first level.',
-            'Turn toward the visitor café from the gallery corridor.',
-            'Enter the café area.',
-          ],
-          description: 'Take a pause at the museum café; ask staff for current service information.',
-        },
-        {
-          id: 'restrooms',
-          category: 'Visitor facility',
-          name: 'Restrooms',
-          location: 'Second level · prototype room',
-          directions: [
-            'From the main entrance, follow the stairs to the second level.',
-            'Continue along the corridor toward visitor facilities.',
-            'Enter the restroom area.',
-          ],
-          description: 'Use the museum signs to find the nearest restroom from your current gallery.',
-        },
-      ],
       selectedLevelId: 'ground',
-      levels: [
-        {
-          id: 'ground',
-          name: 'Ground level',
-          rooms: [
-            {
-              placeId: 'european-art',
-              mapLabel: 'European Art',
-              x: 48,
-              y: 43,
-              width: 242,
-              height: 98,
-              connector: 'M169 141V163',
-            },
-            {
-              placeId: 'lockers',
-              mapLabel: 'Lockers',
-              x: 350,
-              y: 220,
-              width: 242,
-              height: 88,
-              connector: 'M471 163V220',
-            },
-          ],
-        },
-        {
-          id: 'first',
-          name: 'First level',
-          rooms: [
-            {
-              placeId: 'danish-golden-age',
-              mapLabel: 'Danish Golden Age',
-              x: 48,
-              y: 43,
-              width: 242,
-              height: 98,
-              connector: 'M169 141V163',
-            },
-            {
-              placeId: 'cafe',
-              mapLabel: 'Café',
-              x: 350,
-              y: 220,
-              width: 242,
-              height: 88,
-              connector: 'M471 163V220',
-            },
-          ],
-        },
-        {
-          id: 'second',
-          name: 'Second level',
-          rooms: [
-            {
-              placeId: 'modern-art',
-              mapLabel: 'Modern Art',
-              x: 48,
-              y: 43,
-              width: 242,
-              height: 98,
-              connector: 'M169 141V163',
-            },
-            {
-              placeId: 'restrooms',
-              mapLabel: 'Restrooms',
-              x: 350,
-              y: 220,
-              width: 242,
-              height: 88,
-              connector: 'M471 163V220',
-            },
-          ],
-        },
-      ],
+      zoom: 1,
+      minZoom: 1,
+      maxZoom: 3,
     }
   },
   computed: {
-    allPlaces() {
-      return [...this.zones, ...this.facilities]
+    placesById() {
+      return new Map(places.map((place) => [place.id, place]))
     },
     currentLevel() {
       return this.levels.find((level) => level.id === this.selectedLevelId) ?? this.levels[0]
     },
-    currentLevelRooms() {
-      return this.currentLevel.rooms
-        .map((room) => ({
-          ...room,
-          place: this.allPlaces.find((place) => place.id === room.placeId),
-        }))
-        .filter((room) => room.place)
+    // Selected room is drawn last so its outline is never covered.
+    orderedRooms() {
+      const rooms = this.currentLevel.rooms
+      return [...rooms].sort(
+        (a, b) => (a.placeId === this.selectedPlaceId) - (b.placeId === this.selectedPlaceId),
+      )
     },
     selectedPlace() {
-      return this.allPlaces.find(
-        (place) => place.id === this.selectedPlaceId,
-      )
+      return this.placesById.get(this.selectedPlaceId)
+    },
+    selectedRoomOnMap() {
+      return this.currentLevel.rooms.some((room) => room.placeId === this.selectedPlaceId)
+    },
+    svgStyle() {
+      return { width: `${this.zoom * 100}%`, minWidth: `${this.zoom * 640}px` }
     },
   },
   watch: {
     '$route.query.place': {
       handler(placeId) {
-        const place = this.allPlaces.find((item) => item.id === placeId)
+        const place = this.placesById.get(placeId)
         if (place) {
-          this.selectedPlaceId = placeId
-          const level = this.levels.find((item) =>
-            item.rooms.some((room) => room.placeId === placeId),
-          )
-          if (level) this.selectedLevelId = level.id
+          this.selectedPlaceId = place.id
+          this.selectedLevelId = place.levelId
         }
       },
       immediate: true,
@@ -352,27 +271,87 @@ export default {
   },
   methods: {
     t,
+
+    // Returns the i18n string when the key exists, otherwise the fallback.
+    tx(key, fallback, params) {
+      const value = t(key, params)
+      if (value === undefined || value === null || value === '' || value === key) return fallback
+      return value
+    },
+    levelName(levelId) {
+      return t(`map.levels.${levelId}`)
+    },
+    placeName(id) {
+      const place = this.placesById.get(id)
+      if (!place) return id
+      const fallback = place.number ? t('map.roomName', { number: place.number }) : place.name
+      return this.tx(`places.${id}.name`, fallback)
+    },
+    placeLocation(id) {
+      const place = this.placesById.get(id)
+      if (!place) return ''
+      const fallback = t('map.roomLocation', { level: this.levelName(place.levelId) })
+      return this.tx(`places.${id}.location`, fallback)
+    },
+    placeCategory(place) {
+      const fallback = place.kind === 'room' ? t('map.categoryRoom') : place.name
+      return this.tx(`places.${place.id}.category`, place.kind === 'room' ? fallback : '')
+    },
+    placeDescription(place) {
+      const fallback = place.number
+        ? t('map.roomDescription', { number: place.number, level: this.levelName(place.levelId) })
+        : place.description
+      return this.tx(`places.${place.id}.description`, fallback)
+    },
+    placeDirections(place) {
+      const own = t(`places.${place.id}.directions`)
+      if (Array.isArray(own) && own.length) return own
+      const level = this.levelName(place.levelId)
+      return [
+        t('map.genericDirections.step1', { level }),
+        t('map.genericDirections.step2'),
+        t('map.genericDirections.step3', { name: this.placeName(place.id) }),
+      ]
+    },
+    roomLabel(room) {
+      if (!room.label) return ''
+      return this.tx(`places.${room.placeId}.mapLabel`, room.label)
+    },
+
     selectLevel(level) {
       this.selectedLevelId = level.id
+      this.zoom = 1
       const firstRoom = level.rooms[0]
-      const place = this.allPlaces.find((item) => item.id === firstRoom?.placeId)
+      const place =
+        (firstRoom && this.placesById.get(firstRoom.placeId)) ||
+        places.find((item) => item.levelId === level.id)
+      if (place) this.selectPlace(place)
+    },
+    selectPlaceById(id) {
+      const place = this.placesById.get(id)
       if (place) this.selectPlace(place)
     },
     selectPlace(place) {
       this.selectedPlaceId = place.id
-      const level = this.levels.find((item) =>
-        item.rooms.some((room) => room.placeId === place.id),
-      )
-      if (level) this.selectedLevelId = level.id
+      this.selectedLevelId = place.levelId
       if (this.$route.query.place !== place.id) {
         this.$router.replace({ query: { ...this.$route.query, place: place.id } })
       }
     },
-    activateRoom(event, place) {
+    activateRoom(event, id) {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault()
-        this.selectPlace(place)
+        this.selectPlaceById(id)
       }
+    },
+    zoomIn() {
+      this.zoom = Math.min(this.maxZoom, this.zoom + 0.5)
+    },
+    zoomOut() {
+      this.zoom = Math.max(this.minZoom, this.zoom - 0.5)
+    },
+    zoomReset() {
+      this.zoom = 1
     },
   },
 }
