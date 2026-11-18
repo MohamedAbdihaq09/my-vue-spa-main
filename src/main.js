@@ -3,6 +3,7 @@ import './style.css'
 import App from './App.vue'
 import { locale } from './i18n.js'
 import router from './router'
+import './assets/map-additions.css'
 
 watch(
   locale,

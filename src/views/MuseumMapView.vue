@@ -26,17 +26,15 @@
             :aria-selected="selectedLevelId === level.id"
             @click="selectLevel(level)"
           >
-            {{ t(`map.levels.${level.id}`) }}
+            {{ levelName(level.id) }}
           </button>
         </div>
 
         <div class="map-toolbar">
-          <p class="map-label">
-            {{ t(`map.levels.${currentLevel.id}`) }} · {{ t('map.schematicPlan') }}
-          </p>
-          <div v-if="currentLevel.planAvailable" class="zoom-controls" role="group" :aria-label="t('map.zoomLabel')">
+          <p class="map-label">{{ levelName(currentLevel.id) }} · {{ t('map.schematicPlan') }}</p>
+          <div class="zoom-controls" role="group" :aria-label="t('map.zoomLabel')">
             <button class="zoom-button" type="button" :disabled="zoom <= minZoom" :aria-label="t('map.zoomOut')" @click="zoomOut">−</button>
-            <button class="zoom-button" type="button" :disabled="zoom === 1" :aria-label="t('map.zoomReset')" @click="zoomReset">100%</button>
+            <button class="zoom-button" type="button" :disabled="zoom === 1" :aria-label="t('map.zoomReset')" @click="zoomReset">{{ Math.round(zoom * 100) }}%</button>
             <button class="zoom-button" type="button" :disabled="zoom >= maxZoom" :aria-label="t('map.zoomIn')" @click="zoomIn">+</button>
           </div>
         </div>
@@ -51,23 +49,28 @@
             :aria-labelledby="`floor-tab-${currentLevel.id} floor-plan-title`"
             aria-describedby="floor-plan-description"
           >
-            <title id="floor-plan-title">
-              {{ t(`map.levels.${currentLevel.id}`) }} {{ t('map.floorPlanSuffix') }}
-            </title>
+            <title id="floor-plan-title">{{ levelName(currentLevel.id) }} {{ t('map.floorPlanSuffix') }}</title>
             <desc id="floor-plan-description">{{ t('map.floorPlanDescription') }}</desc>
 
             <defs>
-              <pattern id="floor-hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-                <line x1="0" y1="0" x2="0" y2="8" class="hatch-line" />
+              <pattern id="smk-hatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <rect class="hatch-bg" width="9" height="9" />
+                <line class="hatch-line" x1="0" y1="0" x2="0" y2="9" />
               </pattern>
             </defs>
 
-            <g :transform="currentLevel.transform || null">
-              <path v-for="(d, i) in currentLevel.shell" :key="`shell-${i}`" class="floor-outline" :d="d" />
-              <path v-for="(d, i) in currentLevel.spaces" :key="`space-${i}`" class="floor-space" :d="d" />
-              <path v-for="(d, i) in currentLevel.bridges" :key="`bridge-${i}`" class="floor-space floor-bridge" :d="d" />
+            <g :transform="currentLevel.transform">
+              <!-- Building footprint in the wall colour; the walls are the gaps between shapes. -->
+              <path class="floor-shell" :d="currentLevel.shell" />
               <path v-for="(d, i) in currentLevel.voids" :key="`void-${i}`" class="floor-void" :d="d" />
-              <path v-for="(d, i) in currentLevel.fixtures" :key="`fixture-${i}`" class="floor-fixture" :d="d" />
+              <path
+                v-for="(space, i) in currentLevel.spaces"
+                :key="`space-${i}`"
+                class="floor-space"
+                :class="{ 'is-hatched': space.h }"
+                fill-rule="evenodd"
+                :d="space.d"
+              />
 
               <g
                 v-for="room in orderedRooms"
@@ -81,48 +84,51 @@
                 @click="selectPlaceById(room.placeId)"
                 @keydown="activateRoom($event, room.placeId)"
               >
-                <path class="room-shape" :d="room.d" />
+                <path class="room-shape" :class="{ 'is-hatched': room.h }" fill-rule="evenodd" :d="room.d" />
+              </g>
+
+              <!-- Partition walls drawn on top of the rooms they divide. -->
+              <path v-if="currentLevel.walls" class="floor-wall" :d="currentLevel.walls" />
+
+              <!-- Labels last so walls never cover them; the room buttons carry the accessible names. -->
+              <g aria-hidden="true">
                 <text
-                  v-if="roomLabel(room)"
+                  v-for="room in labelledRooms"
+                  :key="`label-${room.placeId}`"
                   class="room-map-label"
+                  :class="{ 'is-outside': room.outside, 'is-selected': selectedPlaceId === room.placeId }"
                   text-anchor="middle"
-                  dominant-baseline="middle"
+                  dominant-baseline="central"
                   :x="room.x"
                   :y="room.y"
-                  :font-size="room.labelSize || currentLevel.labelSize"
+                  :font-size="labelSize(room)"
                 >
                   {{ roomLabel(room) }}
                 </text>
-                <g v-if="room.icon" class="map-icon" :transform="`translate(${room.icon.x} ${room.icon.y})`" aria-hidden="true">
-                  <circle :r="room.icon.r" />
-                  <g class="map-icon-glyph" :transform="`scale(${room.icon.r / 22})`">
-                    <template v-if="room.icon.type === 'wc'">
-                      <circle cx="-8" cy="-11" r="3.5" />
-                      <path d="M-12 -5H-4V6H-6V13H-10V6H-12Z" />
-                      <circle cx="8" cy="-11" r="3.5" />
-                      <path d="M8 -5L13 6H3Z M6 6H10V13H6Z" />
-                      <path d="M0 -14V14" class="glyph-stroke" />
-                    </template>
-                  </g>
-                </g>
               </g>
 
               <g
                 v-for="(icon, i) in currentLevel.icons"
                 :key="`icon-${i}`"
                 class="map-icon"
+                :class="`is-${icon.type}`"
                 :transform="`translate(${icon.x} ${icon.y})`"
                 aria-hidden="true"
               >
                 <circle :r="icon.r" />
-                <g class="map-icon-glyph glyph-stroke" :transform="`scale(${icon.r / 22})`">
-                  <path v-if="icon.type === 'stairs'" d="M-10 10H-4V4H2V-2H8V-8H12" />
-                  <template v-else-if="icon.type === 'lift'">
-                    <rect x="-11" y="-11" width="22" height="22" rx="2" />
-                    <path d="M-5 -1L0 -7L5 -1M-5 2L0 8L5 2" />
-                  </template>
-                </g>
+                <MapIconGlyph :type="icon.type" :transform="`scale(${icon.r / 22})`" />
               </g>
+
+              <text
+                v-if="currentLevel.entranceLabel"
+                class="entrance-label"
+                text-anchor="middle"
+                dominant-baseline="central"
+                :x="currentLevel.entranceLabel.x"
+                :y="currentLevel.entranceLabel.y"
+              >
+                {{ t('map.mainEntrance') }}
+              </text>
             </g>
           </svg>
         </div>
@@ -136,6 +142,15 @@
           <span>{{ t('map.selectedRoom') }}</span>
           <span class="legend-outline" aria-hidden="true"></span>
           <span>{{ t('map.roomOutline') }}</span>
+          <span v-for="type in legendIcons" :key="type" class="legend-icon">
+            <svg class="legend-icon-svg" viewBox="-24 -24 48 48" aria-hidden="true">
+              <g class="map-icon" :class="`is-${type}`">
+                <circle r="22" />
+                <MapIconGlyph :type="type" />
+              </g>
+            </svg>
+            <span>{{ t(`map.legend.${type}`) }}</span>
+          </span>
         </div>
       </div>
 
@@ -146,7 +161,7 @@
           <p class="muted-copy">{{ placeDescription(selectedPlace) }}</p>
         </div>
         <p class="detail-meta">{{ placeLocation(selectedPlace.id) }}</p>
-        <p v-if="!selectedRoomOnMap" class="detail-meta">{{ t('map.notOnPlan') }}</p>
+        <p v-if="!onPlan.has(selectedPlace.id)" class="detail-meta">{{ t('map.notOnPlan') }}</p>
         <div class="room-directions">
           <h3>{{ t('map.directionsTitle') }}</h3>
           <ol class="direction-list">
@@ -213,21 +228,72 @@
 </template>
 
 <script>
+import { h } from 'vue'
 import { t } from '../i18n.js'
 import GettingHereMap from '../components/GettingHereMap.vue'
-import { VIEWBOX, levels, zones, facilities, places } from '../data/smkFloorPlans.js'
+import { VIEWBOX, levels, zones, facilities, places, DEFAULT_PLACE } from '../data/smkFloorPlans.js'
+
+// The level with the main entrance (Forhal).
+const ENTRANCE_LEVEL = 'first'
+const ICON_ORDER = ['entrance', 'stairs', 'lift', 'wc', 'cafe', 'shop']
+// CJK / full-width characters are about 1em wide; everything else ~0.6em.
+const WIDE_CHARS = /[\u1100-\u11ff\u2e80-\u9fff\uac00-\ud7af\uff00-\uffef]/
+
+// Icon glyphs, drawn in a 44×44 box centred on 0,0. `fill: true` = solid shape.
+const GLYPHS = {
+  stairs: [['path', { d: 'M-11 9H-5V3H1V-3H7V-9H11' }]],
+  lift: [
+    ['rect', { x: -11, y: -11, width: 22, height: 22, rx: 2 }],
+    ['path', { d: 'M-5 -2L0 -7L5 -2M-5 2L0 7L5 2' }],
+  ],
+  wc: [
+    ['circle', { cx: -7, cy: -10, r: 3, fill: true }],
+    ['path', { d: 'M-11 -5H-3V5H-5V12H-9V5H-11Z', fill: true }],
+    ['circle', { cx: 7, cy: -10, r: 3, fill: true }],
+    ['path', { d: 'M7 -5L12 6H9V12H5V6H2Z', fill: true }],
+    ['path', { d: 'M0 -13V13' }],
+  ],
+  cafe: [
+    ['path', { d: 'M-11 -3H6V3A6 6 0 0 1 0 9H-5A6 6 0 0 1 -11 3Z' }],
+    ['path', { d: 'M6 -1H8A3 3 0 0 1 8 5H5' }],
+    ['path', { d: 'M-6 -11V-7M-1 -11V-7' }],
+  ],
+  shop: [
+    ['path', { d: 'M0 -6Q-5 -9 -11 -7V9Q-5 7 0 10Q5 7 11 9V-7Q5 -9 0 -6Z' }],
+    ['path', { d: 'M0 -6V10' }],
+  ],
+  entrance: [
+    ['path', { d: 'M-11 0H3M-2 -5L3 0L-2 5' }],
+    ['path', { d: 'M2 -10H10V10H2' }],
+  ],
+}
+
+// Renders one icon glyph; used on the map and in the legend.
+const MapIconGlyph = {
+  name: 'MapIconGlyph',
+  props: { type: { type: String, required: true } },
+  render() {
+    return h(
+      'g',
+      { class: 'map-icon-glyph' },
+      (GLYPHS[this.type] || []).map(([tag, { fill, ...attrs }]) =>
+        h(tag, { ...attrs, class: fill ? 'is-filled' : null }),
+      ),
+    )
+  },
+}
 
 export default {
   name: 'MuseumMapView',
-  components: { GettingHereMap },
+  components: { GettingHereMap, MapIconGlyph },
   data() {
     return {
       levels,
       zones,
       facilities,
       viewBox: VIEWBOX,
-      selectedPlaceId: 'european-art',
-      selectedLevelId: 'ground',
+      selectedPlaceId: 'forhal',
+      selectedLevelId: ENTRANCE_LEVEL,
       zoom: 1,
       minZoom: 1,
       maxZoom: 3,
@@ -237,21 +303,29 @@ export default {
     placesById() {
       return new Map(places.map((place) => [place.id, place]))
     },
+    // Ids of every place that has a shape on some level.
+    onPlan() {
+      return new Set(this.levels.flatMap((level) => level.rooms.map((room) => room.placeId)))
+    },
     currentLevel() {
       return this.levels.find((level) => level.id === this.selectedLevelId) ?? this.levels[0]
     },
-    // Selected room is drawn last so its outline is never covered.
+    // Selected room is drawn last so its outline is never covered by a neighbour.
     orderedRooms() {
-      const rooms = this.currentLevel.rooms
-      return [...rooms].sort(
-        (a, b) => (a.placeId === this.selectedPlaceId) - (b.placeId === this.selectedPlaceId),
+      const selected = this.selectedPlaceId
+      return [...this.currentLevel.rooms].sort(
+        (a, b) => (a.placeId === selected) - (b.placeId === selected),
       )
+    },
+    labelledRooms() {
+      return this.currentLevel.rooms.filter((room) => this.roomLabel(room))
+    },
+    legendIcons() {
+      const present = new Set(this.currentLevel.icons.map((icon) => icon.type))
+      return ICON_ORDER.filter((type) => present.has(type))
     },
     selectedPlace() {
       return this.placesById.get(this.selectedPlaceId)
-    },
-    selectedRoomOnMap() {
-      return this.currentLevel.rooms.some((room) => room.placeId === this.selectedPlaceId)
     },
     svgStyle() {
       return { width: `${this.zoom * 100}%`, minWidth: `${this.zoom * 640}px` }
@@ -263,7 +337,7 @@ export default {
         const place = this.placesById.get(placeId)
         if (place) {
           this.selectedPlaceId = place.id
-          this.selectedLevelId = place.levelId
+          if (place.levelId) this.selectedLevelId = place.levelId
         }
       },
       immediate: true,
@@ -272,11 +346,10 @@ export default {
   methods: {
     t,
 
-    // Returns the i18n string when the key exists, otherwise the fallback.
+    // i18n lookup with a fallback when the key is missing (t() returns the key).
     tx(key, fallback, params) {
       const value = t(key, params)
-      if (value === undefined || value === null || value === '' || value === key) return fallback
-      return value
+      return typeof value === 'string' && value !== key && value !== '' ? value : fallback
     },
     levelName(levelId) {
       return t(`map.levels.${levelId}`)
@@ -290,41 +363,55 @@ export default {
     placeLocation(id) {
       const place = this.placesById.get(id)
       if (!place) return ''
-      const fallback = t('map.roomLocation', { level: this.levelName(place.levelId) })
+      const fallback = place.levelId ? this.levelName(place.levelId) : t('map.locationSigns')
       return this.tx(`places.${id}.location`, fallback)
     },
     placeCategory(place) {
-      const fallback = place.kind === 'room' ? t('map.categoryRoom') : place.name
-      return this.tx(`places.${place.id}.category`, place.kind === 'room' ? fallback : '')
+      return this.tx(`places.${place.id}.category`, t(`map.category.${place.kind}`))
     },
     placeDescription(place) {
       const fallback = place.number
         ? t('map.roomDescription', { number: place.number, level: this.levelName(place.levelId) })
-        : place.description
+        : ''
       return this.tx(`places.${place.id}.description`, fallback)
     },
     placeDirections(place) {
       const own = t(`places.${place.id}.directions`)
       if (Array.isArray(own) && own.length) return own
-      const level = this.levelName(place.levelId)
-      return [
-        t('map.genericDirections.step1', { level }),
-        t('map.genericDirections.step2'),
-        t('map.genericDirections.step3', { name: this.placeName(place.id) }),
-      ]
+
+      const g = 'map.genericDirections.'
+      const name = this.placeName(place.id)
+      if (!place.levelId) {
+        return [t(`${g}entrance`), t(`${g}zoneFollow`, { name }), t(`${g}askStaff`)]
+      }
+      const steps = [t(`${g}entrance`)]
+      if (place.id === 'forhal') return [...steps, t(`${g}highlight`, { name })]
+      if (place.levelId !== ENTRANCE_LEVEL) {
+        steps.push(t(`${g}stairs`, { level: this.levelName(place.levelId) }))
+      }
+      steps.push(t(place.kind === 'room' ? `${g}followRoom` : `${g}followSigns`, { name }))
+      return steps
     },
     roomLabel(room) {
-      if (!room.label) return ''
-      return this.tx(`places.${room.placeId}.mapLabel`, room.label)
+      if (room.noLabel) return ''
+      if (room.number) return room.number
+      return this.tx(`places.${room.placeId}.mapLabel`, this.placeName(room.placeId))
+    },
+    // Shrink the label until it fits the room's width (CJK glyphs are ~1em wide).
+    labelSize(room) {
+      const text = this.roomLabel(room)
+      const perChar = WIDE_CHARS.test(text) ? 1 : 0.6
+      const fit = Math.min(room.fs, room.lw / (Math.max(text.length, 1) * perChar))
+      // Room numbers may overflow a narrow room slightly (as on the printed plan).
+      return Math.max(room.number ? 14 : 9, fit)
     },
 
     selectLevel(level) {
       this.selectedLevelId = level.id
       this.zoom = 1
-      const firstRoom = level.rooms[0]
       const place =
-        (firstRoom && this.placesById.get(firstRoom.placeId)) ||
-        places.find((item) => item.levelId === level.id)
+        this.placesById.get(DEFAULT_PLACE[level.id]) ||
+        this.placesById.get(level.rooms[0]?.placeId)
       if (place) this.selectPlace(place)
     },
     selectPlaceById(id) {
@@ -333,7 +420,7 @@ export default {
     },
     selectPlace(place) {
       this.selectedPlaceId = place.id
-      this.selectedLevelId = place.levelId
+      if (place.levelId) this.selectedLevelId = place.levelId
       if (this.$route.query.place !== place.id) {
         this.$router.replace({ query: { ...this.$route.query, place: place.id } })
       }

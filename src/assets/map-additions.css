@@ -1,0 +1,242 @@
+/* SMK floor-plan styles. Replaces the earlier map-additions.css.
+   These rules target the new data-driven SVG; tweak the tokens to match
+   your design system. */
+
+.floor-plan-panel {
+  --map-bg: #0b0b0c;
+  --map-wall: #f1ece3;
+  --map-room: #1f2023;
+  --map-hatch: #55565b;
+  --map-text: #f1ece3;
+  --map-muted: #8a8c90;
+  --map-accent: #f2b544;
+  --map-accent-fill: #6b5326; /* opaque: white labels stay readable (7:1) */
+  --map-focus: #7cc7ff;
+}
+
+.map-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.zoom-controls {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.zoom-button {
+  min-width: 44px;
+  min-height: 44px; /* WCAG 2.2 target size */
+  padding: 0 8px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.zoom-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.zoom-button:focus-visible {
+  outline: 3px solid var(--map-focus);
+  outline-offset: 2px;
+}
+
+.floor-map-scroll {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 8px;
+  background: var(--map-bg);
+}
+
+.floor-plan {
+  display: block;
+  height: auto;
+  background: var(--map-bg);
+}
+
+/* ---- Plan layers ------------------------------------------------------- */
+
+.floor-shell {
+  fill: var(--map-wall);
+}
+
+.floor-void {
+  fill: var(--map-bg);
+}
+
+.floor-space {
+  fill: var(--map-room);
+  pointer-events: none;
+}
+
+.floor-wall {
+  fill: none;
+  stroke: var(--map-wall);
+  stroke-width: 4.5;
+  stroke-linecap: square;
+  pointer-events: none;
+}
+
+.floor-space.is-hatched {
+  fill: url(#smk-hatch);
+}
+
+.hatch-bg {
+  fill: var(--map-room);
+}
+
+.hatch-line {
+  stroke: var(--map-hatch);
+  stroke-width: 2.5;
+}
+
+/* ---- Selectable rooms --------------------------------------------------- */
+
+.floor-room {
+  cursor: pointer;
+  outline: none;
+}
+
+.floor-room .room-shape {
+  fill: var(--map-room);
+  stroke: transparent;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  paint-order: stroke;
+}
+
+.floor-room .room-shape.is-hatched {
+  fill: url(#smk-hatch);
+}
+
+.floor-room:hover .room-shape {
+  stroke: var(--map-accent);
+}
+
+/* Keyboard focus: dashed outline in a second colour (3:1+ on the dark plan). */
+.floor-room:focus-visible .room-shape {
+  stroke: var(--map-focus);
+  stroke-width: 4;
+  stroke-dasharray: 8 4;
+}
+
+/* Selected: accent fill + heavy outline, so it never relies on colour alone. */
+.floor-room.is-selected .room-shape {
+  fill: var(--map-accent-fill);
+  stroke: var(--map-accent);
+  stroke-width: 4;
+}
+
+.room-map-label {
+  fill: var(--map-text);
+  font-family: inherit;
+  font-weight: 500;
+  pointer-events: none;
+  user-select: none;
+  /* dark halo keeps labels readable where they overlap a wall */
+  paint-order: stroke;
+  stroke: var(--map-room);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.room-map-label.is-outside {
+  fill: var(--map-muted);
+  stroke: var(--map-bg);
+}
+
+.room-map-label.is-selected {
+  font-weight: 700;
+  stroke: var(--map-accent-fill);
+}
+
+.room-map-label.is-outside.is-selected {
+  fill: var(--map-accent);
+  stroke: var(--map-bg);
+}
+
+/* ---- Icons ---------------------------------------------------------------- */
+
+.map-icon {
+  pointer-events: none;
+}
+
+.map-icon > circle {
+  fill: var(--map-muted);
+  stroke: #c9cacd;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-icon-glyph {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-icon-glyph .is-filled {
+  fill: #fff;
+  stroke: none;
+}
+
+.map-icon.is-entrance > circle {
+  fill: #f1ece3;
+  stroke: var(--map-muted);
+}
+
+.map-icon.is-entrance .map-icon-glyph {
+  stroke: #1f2023;
+}
+
+.entrance-label {
+  fill: var(--map-muted);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+/* ---- Legend ---------------------------------------------------------------- */
+
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.legend-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-icon-svg {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
+.plan-pending {
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  padding: 24px;
+  border: 1px dashed currentColor;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .floor-room .room-shape {
+    transition: fill 0.15s ease, stroke 0.15s ease;
+  }
+}
