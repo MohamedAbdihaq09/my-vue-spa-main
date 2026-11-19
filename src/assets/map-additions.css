@@ -49,11 +49,46 @@
   outline-offset: 2px;
 }
 
-.floor-map-scroll {
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
+.floor-map-viewport {
+  position: relative;
+  overflow: hidden;
   border-radius: 8px;
   background: var(--map-bg);
+  touch-action: pan-y; /* one finger still scrolls the page; pinch zooms the map */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.floor-map-viewport.is-zoomed {
+  touch-action: none; /* when zoomed in, one finger pans the map */
+  cursor: grab;
+}
+
+.floor-map-viewport.is-dragging,
+.floor-map-viewport.is-dragging .floor-room {
+  cursor: grabbing;
+}
+
+.zoom-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  max-width: calc(100% - 24px);
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  font-size: 14px;
+  text-align: center;
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.zoom-hint.is-visible {
+  opacity: 1;
 }
 
 .floor-plan {
@@ -238,5 +273,9 @@
 @media (prefers-reduced-motion: no-preference) {
   .floor-room .room-shape {
     transition: fill 0.15s ease, stroke 0.15s ease;
+  }
+
+  .zoom-hint {
+    transition: opacity 0.2s ease;
   }
 }
